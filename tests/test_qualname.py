@@ -47,3 +47,12 @@ def test_nested_functions():
     assert qualname(f) == 'f'
     assert qualname(f()) == 'f.<locals>.g'
     assert qualname(C.D.h()) == 'C.D.h.<locals>.i.<locals>.j'
+
+
+def test_directly_constructed_type():
+    new_type = type('NewCls', (object,), {})
+    assert qualname(new_type) == 'NewCls'
+
+
+def test_builtin_type():
+    assert qualname(int) == 'int'
