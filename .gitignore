@@ -7,3 +7,4 @@ __pycache__/
 
 # Testing cruft
 /.tox/
+/.cache/
