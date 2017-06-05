@@ -4,10 +4,12 @@ Module to find out the qualified name of a class.
 
 import ast
 import inspect
+import types
 
 __all__ = ['qualname']
 
 _cache = {}
+_file_cache = {}
 
 
 class _Visitor(ast.NodeVisitor):
@@ -35,12 +37,43 @@ class _Visitor(ast.NodeVisitor):
         self.stack.pop()
 
 
+def _fallback_to_name(obj):
+    name = obj.__name__
+    try:
+        obj.__qualname__ = name
+    except (AttributeError, TypeError):
+        _cache[obj] = name
+    return name
+
+
 def qualname(obj):
     """Find out the qualified name for a class or function."""
 
     # For Python 3.3+, this is straight-forward.
+    # This attribute is also set where possible on objects processed
+    # for the first time as a simple cache
     if hasattr(obj, '__qualname__'):
         return obj.__qualname__
+
+    # This is for objects that can't have an attribute set on them,
+    # e.g. builtins.
+    # See _fallback_to_name
+    if obj in _cache:
+        return _cache[obj]
+
+    code = None
+    if isinstance(obj, (types.FunctionType, types.MethodType)):
+        # Extract function from unbound method (Python 2)
+        obj = getattr(obj, 'im_func', obj)
+        try:
+            code = obj.__code__
+        except AttributeError:
+            code = obj.func_code
+
+        # Different instances of the same local function share the same code object, so this
+        # can be used to look them up in the cache
+        if code in _cache:
+            return _cache[code]
 
     # For older Python versions, things get complicated.
     # Obtain the filename and the line number where the
@@ -48,37 +81,37 @@ def qualname(obj):
     try:
         filename = inspect.getsourcefile(obj)
     except TypeError:
-        return obj.__qualname__  # raises a sensible error
+        return _fallback_to_name(obj)
     if inspect.isclass(obj):
         try:
             _, lineno = inspect.getsourcelines(obj)
         except (OSError, IOError):
-            return obj.__qualname__  # raises a sensible error
-    elif inspect.isfunction(obj) or inspect.ismethod(obj):
-        if hasattr(obj, 'im_func'):
-            # Extract function from unbound method (Python 2)
-            obj = obj.im_func
-        try:
-            code = obj.__code__
-        except AttributeError:
-            code = obj.func_code
+            return _fallback_to_name(obj)
+    elif code:
         lineno = code.co_firstlineno
     else:
-        return obj.__qualname__  # raises a sensible error
+        return _fallback_to_name(obj)
 
     # Re-parse the source file to figure out what the
     # __qualname__ should be by analysing the abstract
     # syntax tree. Use a cache to avoid doing this more
     # than once for the same file.
-    qualnames = _cache.get(filename)
+    qualnames = _file_cache.get(filename)
     if qualnames is None:
         with open(filename, 'r') as fp:
             source = fp.read()
         node = ast.parse(source, filename)
         visitor = _Visitor()
         visitor.visit(node)
-        _cache[filename] = qualnames = visitor.qualnames
+        _file_cache[filename] = qualnames = visitor.qualnames
+
     try:
-        return qualnames[lineno]
+        result = qualnames[lineno]
     except KeyError:
-        return obj.__qualname__  # raises a sensible error
+        return _fallback_to_name(obj)
+
+    obj.__qualname__ = result
+    if code:
+        _cache[code] = result
+
+    return result
