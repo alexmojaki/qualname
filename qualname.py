@@ -10,6 +10,16 @@ __all__ = ['qualname']
 
 _cache = {}
 _file_cache = {}
+_processed_modules = set()
+
+
+def _assign_qualnames(module, parent, prefix=''):
+    for name, child in inspect.getmembers(parent,
+                                          lambda m: inspect.isclass(m) and inspect.getmodule(m) == module):
+        qname = prefix + name
+        if not hasattr(child, '__qualname__'):
+            child.__qualname__ = qname
+        _assign_qualnames(module, child, qname + '.')
 
 
 class _Visitor(ast.NodeVisitor):
@@ -83,6 +93,18 @@ def qualname(obj):
     except TypeError:
         return _fallback_to_name(obj)
     if inspect.isclass(obj):
+        # For classes, several approaches are used, and the combination should work
+        # for the vast majority of cases.
+
+        # First, assign a __qualname__ to all accessible classes in the module
+        module = inspect.getmodule(obj)
+        if module not in _processed_modules:
+            _assign_qualnames(module, module)
+
+            # Check if that worked for this class
+            if hasattr(obj, '__qualname__'):
+                return obj.__qualname__
+
         try:
             _, lineno = inspect.getsourcelines(obj)
         except (OSError, IOError):
