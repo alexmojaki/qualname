@@ -25,14 +25,39 @@ class C(object):
             def i():
                 def j():
                     pass
+
                 return j
+
             return i()
 
 
 def f():
     def g():
         pass
+
     return g
+
+
+class ClassWithProblematicDocstring:
+    """
+    This is an example of how inspect.getsourcelines, which uses a naive
+    regex approach, can go very wrong. If you use it on the inner
+    class InnerClass, you'll get an error, because the regex finds the
+    string 'class InnerClass' in the line above before the class definition.
+    Hence the library was updated to make test_problematic_docstring pass.
+    """
+
+    class InnerClass:
+        pass
+
+
+class D:
+    """
+    This class has the same unqualified name as C.D, making it harder to
+    distinguish between them (inspect.getsourcelines returns the same result
+    for both classes).
+    """
+    pass
 
 
 def _test_cache(test_func):
@@ -87,3 +112,14 @@ def test_directly_constructed_type():
 def test_builtins():
     assert qualname(int) == 'int'
     assert qualname(len) == 'len'
+
+
+@_test_cache
+def test_problematic_docstring():
+    assert qualname(ClassWithProblematicDocstring.InnerClass) == 'ClassWithProblematicDocstring.InnerClass'
+
+
+@_test_cache
+def test_classes_with_same_name():
+    assert qualname(C.D) == 'C.D'
+    assert qualname(D) == 'D'
