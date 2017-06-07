@@ -60,6 +60,19 @@ class D:
     pass
 
 
+def class_maker1():
+    """
+    Because C is defined inside a function, _assign_qualnames cannot reach it
+    and so another approach is needed.
+    """
+
+    class C:
+        def f(self):
+            pass
+
+    return C
+
+
 def _test_cache(test_func):
     """
     This ensures that the cache works by running the test twice, where the second
@@ -123,3 +136,7 @@ def test_problematic_docstring():
 def test_classes_with_same_name():
     assert qualname(C.D) == 'C.D'
     assert qualname(D) == 'D'
+
+
+def test_local_classes_with_same_name():
+    assert qualname(class_maker1()) == 'class_maker1.<locals>.C'
