@@ -62,15 +62,79 @@ class D:
 
 def class_maker1():
     """
-    Because C is defined inside a function, _assign_qualnames cannot reach it
-    and so another approach is needed.
+    Because the class C below is defined inside a function, it cannot be reached from
+    the top level and so another approach is needed to distinguish it from
+    the C at the top of the file. However, since it is the *only* C not reachable
+    from the top level, the qualname can still be determined unambiguously,
+    even without any methods.
     """
 
     class C:
-        def f(self):
-            pass
+        pass
 
     return C
+
+
+def class_maker2():
+    """
+    For the nested classes D here, the library can't guarantee the qualnames.
+    But it can guess based on the methods of the classes, whose qualnames are known.
+    """
+
+    class X:
+        class D:
+            """
+            This class has the most methods and is the base class of the others.
+            This is to ensure that inherited methods do not interfere in the
+            computation.
+            """
+
+            def f1(self):
+                pass
+
+            def f2(self):
+                pass
+
+            def f3(self):
+                pass
+
+    class Y:
+        class D(X.D):
+            def g(self):
+                pass
+
+    class Z:
+        class D(X.D):
+            def h(self):
+                pass
+
+            def i(self):
+                pass
+
+    # If you did this kind of method assignment enough times the library would
+    # make the wrong guess, but since most of the methods on Z.D are originally
+    # defined on it, it gets the qualname of the class right.
+    Z.D.g = Y.D.g
+
+    return X, Y, Z
+
+
+def class_maker3():
+    """
+    These classes have no methods and so the library has no way of reliably
+    guessing the qualname. However it must still make some guess rather than
+    an error.
+    """
+
+    class A1:
+        class B:
+            pass
+
+    class A2:
+        class B:
+            pass
+
+    return A1, A2
 
 
 def _test_cache(test_func):
@@ -138,5 +202,23 @@ def test_classes_with_same_name():
     assert qualname(D) == 'D'
 
 
+# The cache doesn't work for local classes
 def test_local_classes_with_same_name():
     assert qualname(class_maker1()) == 'class_maker1.<locals>.C'
+    X, Y, Z = class_maker2()
+    assert qualname(X) == 'class_maker2.<locals>.X'
+    assert qualname(Y) == 'class_maker2.<locals>.Y'
+    assert qualname(Z) == 'class_maker2.<locals>.Z'
+    assert qualname(X.D) == 'class_maker2.<locals>.X.D'
+    assert qualname(Y.D) == 'class_maker2.<locals>.Y.D'
+    assert qualname(Z.D) == 'class_maker2.<locals>.Z.D'
+    assert qualname(X.D.f1) == 'class_maker2.<locals>.X.D.f1'
+    assert qualname(X.D.f2) == 'class_maker2.<locals>.X.D.f2'
+    assert qualname(Y.D.g) == 'class_maker2.<locals>.Y.D.g'
+    assert qualname(Z.D.h) == 'class_maker2.<locals>.Z.D.h'
+    assert qualname(Z.D.i) == 'class_maker2.<locals>.Z.D.i'
+    A1, A2 = class_maker3()
+    options = ['class_maker3.<locals>.A1.B',
+               'class_maker3.<locals>.A2.B']
+    assert qualname(A1.B) in options
+    assert qualname(A2.B) in options
